@@ -231,6 +231,7 @@ def getMaxUploadSize(config, access_token):
 
 def register_user(
     user,
+    email,
     password,
     displayname,
     server_location,
@@ -247,6 +248,7 @@ def register_user(
         "password": password,
         "displayname": "".join([displayname, config_yaml["name-suffix"]]),
         "admin": admin,
+        "threepids": [{"medium": "email","address": email}],
     }
     try:
         r = requests.put(url, json=data, headers=headers, verify=False)
@@ -384,7 +386,8 @@ def migrate_users(userFile, config, access_token):
 
             _servername = config["homeserver"].split('/')[2]
             _matrix_user = user["name"]
-            _matrix_id = '@' + user["name"] + ':' + _servername
+            #_matrix_id = '@' + user["name"] + ':' + _servername
+            _matrix_id = '@' + user["name"] + ':' + config_yaml["domain"]
 
             # check if display name is set
             if "real_name" in user["profile"]:
@@ -415,7 +418,7 @@ def migrate_users(userFile, config, access_token):
 
             log.info("Registering Slack user " + userDetails["slack_id"] + " -> " + userDetails["matrix_id"])
             if not config["dry-run"]:
-                res = register_user(userDetails["matrix_user"], userDetails["matrix_password"], userDetails["slack_real_name"], config["homeserver"], access_token)
+                res = register_user(userDetails["matrix_user"], userDetails["slack_email"], userDetails["matrix_password"], userDetails["slack_real_name"], config["homeserver"], access_token)
                 if res == False:
                     log.error("ERROR while registering user '" + userDetails["matrix_id"] + "'")
                     continue
@@ -437,7 +440,7 @@ def migrate_rooms(roomFile, config, admin_user):
 
     # channels
     channelData = json.load(roomFile)
-    with alive_bar(len(channelData), bar = 'bubbles', spinner = 'waves2') as bar:
+    with alive_bar(len(channelData), bar = 'hollow', spinner = 'waves2') as bar:
         for channel in channelData:
             if config["skip-archived"]:
                 if channel["is_archived"] == True:
@@ -460,13 +463,13 @@ def migrate_rooms(roomFile, config, admin_user):
                         _invitees.append(user)
             else:
                 for user in channel["members"]:
-                    if user != channel["creator"]:
+                    if user != channel["creator"] or config_yaml["create-as-admin"]:
                         if user in userLUT: # ignore dropped users like bots
                             _invitees.append(userLUT[user])
 
             minimal_invites = []
             for user in channel["members"]:
-                if user != channel["creator"]:
+                if user != channel["creator"] or config_yaml["create-as-admin"]:
                     if user in userLUT: # ignore dropped users like bots
                         minimal_invites.append(userLUT[user])
 
@@ -518,7 +521,7 @@ def migrate_dms(roomFile, config):
 
     # channels
     channelData = json.load(roomFile)
-    with alive_bar(len(channelData), bar = 'bubbles', spinner = 'waves2') as bar:
+    with alive_bar(len(channelData), bar = 'squares', spinner = 'waves2') as bar:
         for channel in channelData:
             if config["skip-archived"]:
                 if channel["is_archived"] == True:
@@ -800,7 +803,7 @@ def migrate_messages(fileList, matrix_room, config, tick, log):
     txnId = 1
     progress = 0
 
-    with alive_bar(bar = 'bubbles', spinner = 'waves2', manual=True) as bar:
+    with alive_bar(bar = 'checks', spinner = 'waves2', manual=True) as bar:
         for file in fileList:
             log.debug("prcessing file {}".format(file))
             try:
@@ -901,7 +904,7 @@ def main():
     # create DMs
     if "dms.json" in jsonFiles and not dmLUT:
         log.info("Creating DMS")
-        roomlist_dms = migrate_dms(jsonFiles["dms.json"], config)
+        roomlist_dms = migrate_dms(jsonFiles["dms.json"], config, admin_user)
 
     # write LUTs to file to be able to load from later if something goes wrong
     if not read_luts:

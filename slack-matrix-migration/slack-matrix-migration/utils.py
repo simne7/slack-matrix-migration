@@ -67,7 +67,12 @@ def send_event(
                 invite_user(
                     matrix_room,
                     matrix_user_id,
-                    conf
+                    config
+                )
+                autojoin_user(
+                    matrix_user_id,
+                    matrix_room,
+                    config
                 )
                 try:
                     r = requests.put(url, headers={'Authorization': 'Bearer ' + config["as_token"]}, json=matrix_message, verify=False)
@@ -126,3 +131,30 @@ def invite_user(
                         log.info(r.json()["error"])
                     except Exception:
                         pass
+
+def autojoin_user(
+    invitee,
+    roomId,
+    config,
+):
+    #POST /_matrix/client/r0/rooms/{roomId}/join
+    url = "%s/_matrix/client/r0/rooms/%s/join?user_id=%s" % (config["homeserver"],roomId,invitee,)
+
+    #_log.info("Sending registration request...")
+    try:
+        r = requests.post(url, headers={'Authorization': 'Bearer ' + config["as_token"]}, verify=False)
+    except requests.exceptions.RequestException as e:
+        log.error(
+            "Logging an uncaught exception {}".format(e),
+            exc_info=(traceback)
+        )
+        # log.debug("error creating room {}".format(body))
+        return False
+    else:
+        if r.status_code != 200:
+            log.error("ERROR! Received %d %s" % (r.status_code, r.reason))
+            if 400 <= r.status_code < 500:
+                try:
+                    log.info(r.json()["error"])
+                except Exception:
+                    pass
